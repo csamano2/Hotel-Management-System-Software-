@@ -8,7 +8,8 @@ Purpose: Employee Class for Hotel System
 
 #include<iostream>
 #include <string>
-#include <fstream>
+#include "Reservartions.h"
+
 using namespace std;
 class employeeClass
 {
@@ -21,8 +22,117 @@ private:
 	string ePassword;
 	int eUserIDSize;
 	int ePasswordSize;
+	HotelDB hotel;
+	int currentCustomerID = 0;
+	reservationClass res;
+	MenuHelper mh;
+	map <string, string> eInfo;
+
+	void editReservation() {
+		int selected = 0;
+		if (currentCustomerID != 0) {
+			// Get all the resevations under that customer ID
+			vector<map<string, string>> allReservationInfo = hotel.getReservations(currentCustomerID);
+			res.printReservationDetails(allReservationInfo);
+
+
+			// Select a reservation to edit
+			selected = mh.menuOptionCheck(selected, allReservationInfo.size(), "Please select a reservation above.");
+
+			// Get the ReservationID
+			map<string, string> selectedRes = allReservationInfo[selected - 1];
+			string reservationID = selectedRes["ReservationID"];
+
+			cout << "Please Select what you would like to edit" << endl;
+			cout << "1. Number of guests" << endl;
+			cout << "2. CheckIn Dates" << endl;
+			//cout << "3. Package Type" << endl;
+
+			int edit;
+			cin >> edit;
+			string numGuests, checkOut, checkIn, query = "";
+
+			switch (edit)
+			{
+			case 1:
+				cout << "Number of guest: ";
+				cin >> numGuests;
+				query = "UPDATE Reservation SET NumberOfGuests = " + numGuests + " WHERE ReservationID = " + reservationID;
+				hotel.saveToDatabase(query);
+				employeeMenu();
+			case 2:
+				cout << "Check in date: ";
+				cin >> checkIn;
+				cout << endl;
+				cout << "Check out date: ";
+				cin >> checkOut;
+
+				query = "UPDATE Reservation SET CheckInDate = '" + checkIn + "' , CheckOutDate = '" + checkOut + "' WHERE ReservationID = " + reservationID;
+				hotel.saveToDatabase(query);
+				employeeMenu();
+			//case 3:
+			//	break;
+			default:
+				employeeMenu();
+			}
+
+		}
+		// Select what to edit
+		//PackageType
+		//Number of Guests
+		//Check in dates
+	}
+
+		void cancelReservation() 
+		{
+			if (currentCustomerID != 0) {
+				res.cancelCustomerReservation(currentCustomerID);
+				
+				if (res.reservationCancelled) 
+				{
+					cout << "Reservation for customer has been cancelled." << endl;
+					employeeMenu();
+				}
+				else
+				{
+					cout << "Reservation for customer was NOT cancelled. Please try again later" << endl;
+					employeeMenu();
+				}
+			}
+		}
 
 public:
+
+#pragma region Database Calls
+	bool employeeDataLoaded = false;
+	bool employeeSaved = false;
+
+	void getEmployeeData(string eID, string ePass)
+	{
+		string query = "CALL GetEmployeeData('" + eID + "', '" + ePass + "')";
+		eInfo = hotel.getEmployeeData(query);
+
+		if (!eInfo.empty()) {
+			eFirstName = eInfo["FirstName"];
+			eLastName = eInfo["LastName"];
+			eUserID = eInfo["UserID"];
+			ePassword = eInfo["Password"];
+			employeeDataLoaded = true;
+			eInfo.clear();
+		}
+		else
+		{
+			employeeDataLoaded = false;
+		}
+	}
+
+	void saveEmployeeData(string userID, string password, string firstName, string lastName)
+	{
+		string query = "CALL SaveEmployeeData('" + firstName + "', '" + lastName + "', '" + userID + "', '" + password + "')";
+		employeeSaved = hotel.saveToDatabase(query);
+	}
+#pragma endregion
+
 // Employee Menu 
 	void employeeMenu() {
 		int choice; 
@@ -40,8 +150,10 @@ public:
 			employeeAccountInformation();
 			break;
 		case 2:
+			employeeReservationCheck();
 			break;
 		case 3:
+			hotelSummaryReport();
 			break;
 		case 4:
 			break;
@@ -50,8 +162,6 @@ public:
 
 // Employee Create Account 
 	void employeeCreateAccount() {
-		ofstream eAccountFile;
-		eAccountFile.open("EmployeeAccount.txt");
 	// Employee Enters Account Info 
 		cout << " Welcome to Mo's Hotel! " << endl; 
 		cout << "For all new employess, enter the following information below..." << endl;
@@ -78,21 +188,19 @@ public:
 			cout << "Password: ";
 			cin >> ePassword;
 		}
-	// Employee Account File 
-		if (eAccountFile.is_open()) {
-			eAccountFile << "        Employee Account Details" << endl;
-			eAccountFile << " Name: " << eFirstName << eLastName << endl;
-			eAccountFile << "User ID: " << eUserID << endl;
-			eAccountFile << "Password: " << ePassword << endl; 
-			eAccountFile.close();
+	
+		// Save Employee Account Info
+		saveEmployeeData(eUserID, ePassword, eFirstName, eLastName);
+
+		if (employeeSaved)
+		{
 			cout << "Your Account Information has been saved! " << endl;
-			cout << "To proceed, please LOGIN! " << endl;
-			cout << endl;
+			cout << "To proceed, please Login! " << endl;
 		}
-		else {
-			cout << "Account information countn't be saved, please try again! " << endl; 
+		else 
+		{
+			cout << "Account information countn't be saved, please try again! " << endl;
 		}
-		eAccountFile.close();
 		employeeLogin();
 	}
 
@@ -115,32 +223,96 @@ public:
 			cin >> ePassword;
 			ePasswordSize = ePassword.length();
 		}
-		employeeMenu();
+
+		getEmployeeData(eUserID, ePassword);
+
+		if (employeeDataLoaded)
+		{
+			employeeMenu();
+		}
+		else {
+			cout << "Unable to retrieve account information. Please try again!" << endl;
+			employeeLogin();
+		}
 	}
 // Employee Account Information: Menu Option #1
 	void employeeAccountInformation() {
 		string y = "yes";
-		ifstream eAccountFile;
-		eAccountFile.open("EmployeeAccount.txt");
-		if (eAccountFile.is_open()) {
+
+		if (employeeDataLoaded) {
 			cout << "        Employee Account Details" << endl;
 			cout << " Name: " << eFirstName << eLastName << endl;
-			cout << "User ID: " << eUserID << endl;
-			cout << "Password: " << ePassword << endl;
-			eAccountFile.close();
+			cout << " User ID: " << eUserID << endl;
+			cout << " Password: " << ePassword << endl;
 		}
 		cout << "Would you like to go back to the home screen? ";
 		if (cin >> y) {
 			employeeMenu();
 		}
 		else {
-			cout << "Have a great day!" << endl; 
+			cout << "Have a great day!" << endl;
 		}
 	}
 /* EMPLOYEE CUSTOMER RESERVATION CHECK */
-// Employee Customer Check IN 
-	void employeeCheckIn() {
+	void employeeReservationCheck() 
+	{
+		string cFirstName, cLastName, phoneNumber;
 
+		// Enter Customer Information
+		cout << "Please enter the first and last name of customer along with their phone number: " << endl;
+		cout << "First Name : ";
+		cin >> cFirstName;
+		cout << "Last Name : ";
+		cin >> cLastName;
+		cout << "Phone Number : ";
+		cin >> phoneNumber;
+		cout << endl << endl;
+
+		// Get a customers ID Number based on first name, last name and phone number
+		string query = "SELECT CustomerID FROM Customer WHERE FirstName = '" + cFirstName + "'and LastName = '" + cLastName + "' and PhoneNumber = '" + phoneNumber + "';";
+		map <string, string> cInfo = hotel.getCustomerData(query);
+		// Set the data
+		if (!cInfo.empty()) {
+			int eChoice;
+			currentCustomerID = stoi(cInfo["CustomerID"]);
+
+			cout << "Customer Found!" << endl << endl;
+			cout << "       1. Edit a reservation" << endl;
+			cout << "       2. Cancel a reservation " << endl;
+			cout << "       Please Make a Choice: ";
+			cin >> eChoice;
+			switch (eChoice) {
+			case 1:
+				editReservation();
+				break;
+			case 2:
+				cancelReservation();
+				break;
+			default:
+				break;
+			}
+		}
+		else {
+			cout << "A customer with that criteria does not exist. Please try again!" << endl;
+			employeeReservationCheck();
+		}
+	}
+/* EMPLOYEE HOTEL SUMMARY REPORT */
+	void hotelSummaryReport() 
+	{
+		// call the stored procedure that has all the data
+		vector<map<string, string>> summaryReport = hotel.getSummaryReport();
+
+		// display it
+		for (int i = 0; i < summaryReport.size(); i++)
+		{
+			cout << "Summary Report     " << endl;
+			cout << "	Total Number of Reservations: " << summaryReport[i]["numReservations"] << endl;
+			cout << "	# of rooms currently available: " << summaryReport[i]["numRoomsAvailable"] << endl;
+			cout << "	# of rooms under maintenance " << summaryReport[i]["numUnderMaintenance"] << endl;
+			
+			//cout << "	Reservation Total: " << summaryReport[i]["TotalCost"] << endl << endl;
+		}
 	}
 };
 #endif
